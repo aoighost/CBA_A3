@@ -8,8 +8,8 @@
 GVAR(perFrameHandlerArray) = [];
 GVAR(fpsCount) = 0;
 GVAR(lastCount) = -1;
-GVAR(lastFrameRender) = 0;
-GVAR(lastTickTime) = 0;
+GVAR(lastFrameRender) = diag_frameNo;
+GVAR(lastTickTime) = diag_tickTime;
 
 PREP(perFrameEngine);
 
@@ -128,8 +128,6 @@ FUNC(monitorFrameRender) = {
 
 FUNC(onFrame) = {
     TRACE_1("Executing onFrame",nil);
-    GVAR(lastFrameRender) = diag_frameNo;
-    GVAR(lastTickTime) = diag_tickTime;
 
     {
         _x params ["_function", "_delay", "_delta", "", "_args", "_handle"];
@@ -140,6 +138,9 @@ FUNC(onFrame) = {
             false
         };
     } count GVAR(perFrameHandlerArray);
+
+    GVAR(lastFrameRender) = diag_frameNo;
+    GVAR(lastTickTime) = diag_tickTime;
 };
 
 // fix for save games. subtract last tickTime from ETA of all PFHs after mission was loaded
@@ -147,4 +148,40 @@ addMissionEventHandler ["Loaded", {
     {
         _x set [2, (_x select 2) - GVAR(lastTickTime) + diag_tickTime];
     } forEach GVAR(perFrameHandlerArray);
+
+    GVAR(lastFrameRender) = diag_frameNo; // reset these for new session
+    GVAR(lastTickTime) = diag_tickTime;
 }];
+
+GVAR(lastTime) = time;
+
+// increase CBA_missionTime variable
+FUNC(missionTimePFH) = {
+    if (time != GVAR(lastTime)) then {
+        CBA_missionTime = CBA_missionTime + (diag_tickTime - GVAR(lastTickTime)) * accTime;
+    };
+    GVAR(lastTime) = time; // used to detect paused game
+};
+
+// also synch it
+if (isServer) then {
+    CBA_missionTime = 0;
+
+    // server
+    [FUNC(missionTimePFH), 0, []] call CBA_fnc_addPerFrameHandler;
+
+    ["CBA_SynchMissionTime", "onPlayerConnected", {
+        _owner publicVariableClient "CBA_missionTime";
+    }] call BIS_fnc_addStackedEventHandler;
+} else {
+    CBA_missionTime = -1;
+
+    // client
+    0 spawn {
+        "CBA_missionTime" addPublicVariableEventHandler {
+            CBA_missionTime = _this select 1;
+            GVAR(lastTickTime) = diag_tickTime; // prevent time skip on clients
+            [FUNC(missionTimePFH), 0, []] call CBA_fnc_addPerFrameHandler;
+        };
+    };
+};
