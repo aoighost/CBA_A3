@@ -156,11 +156,21 @@ addMissionEventHandler ["Loaded", {
 GVAR(lastTime) = time;
 
 // increase CBA_missionTime variable
-FUNC(missionTimePFH) = {
-    if (time != GVAR(lastTime)) then {
-        CBA_missionTime = CBA_missionTime + (diag_tickTime - GVAR(lastTickTime)) * accTime;
+if (isMultiplayer) then {
+    // no accTime in MP. reduce overhead as much as possible.
+    FUNC(missionTimePFH) = {
+        if (time != GVAR(lastTime)) then {
+            CBA_missionTime = CBA_missionTime + (diag_tickTime - GVAR(lastTickTime));
+            GVAR(lastTime) = time; // used to detect paused game
+        };
     };
-    GVAR(lastTime) = time; // used to detect paused game
+} else {
+    FUNC(missionTimePFH) = {
+        if (time != GVAR(lastTime)) then {
+            CBA_missionTime = CBA_missionTime + (diag_tickTime - GVAR(lastTickTime)) * accTime;
+            GVAR(lastTime) = time; // used to detect paused game
+        };
+    };
 };
 
 // also synch it
