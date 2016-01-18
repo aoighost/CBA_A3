@@ -140,7 +140,6 @@ FUNC(onFrame) = {
     } count GVAR(perFrameHandlerArray);
 
     GVAR(lastFrameRender) = diag_frameNo;
-    GVAR(lastTickTime) = diag_tickTime;
 };
 
 // fix for save games. subtract last tickTime from ETA of all PFHs after mission was loaded
@@ -159,17 +158,25 @@ GVAR(lastTime) = time;
 if (isMultiplayer) then {
     // no accTime in MP. reduce overhead as much as possible.
     FUNC(missionTimePFH) = {
+        private _tickTime = diag_tickTime;
+
         if (time != GVAR(lastTime)) then {
-            CBA_missionTime = CBA_missionTime + (diag_tickTime - GVAR(lastTickTime));
+            CBA_missionTime = CBA_missionTime + (_tickTime - GVAR(lastTickTime));
             GVAR(lastTime) = time; // used to detect paused game
         };
+
+        GVAR(lastTickTime) = _tickTime
     };
 } else {
     FUNC(missionTimePFH) = {
+        private _tickTime = diag_tickTime;
+
         if (time != GVAR(lastTime)) then {
-            CBA_missionTime = CBA_missionTime + (diag_tickTime - GVAR(lastTickTime)) * accTime;
+            CBA_missionTime = CBA_missionTime + (_tickTime - GVAR(lastTickTime)) * accTime;
             GVAR(lastTime) = time; // used to detect paused game
         };
+
+        GVAR(lastTickTime) = _tickTime
     };
 };
 
@@ -183,6 +190,10 @@ if (isServer) then {
     ["CBA_SynchMissionTime", "onPlayerConnected", {
         _owner publicVariableClient "CBA_missionTime";
     }] call BIS_fnc_addStackedEventHandler;
+
+    0 spawn {
+        publicVariable "CBA_missionTime";
+    };
 } else {
     CBA_missionTime = -1;
 
