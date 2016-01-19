@@ -129,6 +129,8 @@ FUNC(monitorFrameRender) = {
 FUNC(onFrame) = {
     TRACE_1("Executing onFrame",nil);
 
+    call FUNC(missionTimePFH);
+
     {
         _x params ["_function", "_delay", "_delta", "", "_args", "_handle"];
 
@@ -159,22 +161,52 @@ addMissionEventHandler ["Loaded", {
     GVAR(lastTickTime) = diag_tickTime;
 }];
 
+CBA_missionTime = 0;
 GVAR(lastTime) = time;
 
 // increase CBA_missionTime variable
 if (isMultiplayer) then {
-    // no accTime in MP. reduce overhead as much as possible.
-    FUNC(missionTimePFH) = {
-        private _tickTime = diag_tickTime;
+    // multiplayer - no accTime
+    if (isServer) then {
+        // server
+        FUNC(missionTimePFH) = {
+            private _tickTime = diag_tickTime;
 
-        if (time != GVAR(lastTime)) then {
-            CBA_missionTime = CBA_missionTime + (_tickTime - GVAR(lastTickTime));
-            GVAR(lastTime) = time; // used to detect paused game
+            if (time != GVAR(lastTime)) then {
+                CBA_missionTime = CBA_missionTime + (_tickTime - GVAR(lastTickTime));
+                GVAR(lastTime) = time; // used to detect paused game
+            };
+
+            GVAR(lastTickTime) = _tickTime
         };
 
-        GVAR(lastTickTime) = _tickTime
+        ["CBA_SynchMissionTime", "onPlayerConnected", {
+            _owner publicVariableClient "CBA_missionTime";
+        }] call BIS_fnc_addStackedEventHandler;
+    } else {
+        CBA_missionTime = -1;
+
+        // client
+        0 spawn {
+            "CBA_missionTime" addPublicVariableEventHandler {
+                CBA_missionTime = _this select 1;
+                GVAR(lastTickTime) = diag_tickTime; // prevent time skip on clients
+
+                FUNC(missionTimePFH) = {
+                    private _tickTime = diag_tickTime;
+
+                    if (time != GVAR(lastTime)) then {
+                        CBA_missionTime = CBA_missionTime + (_tickTime - GVAR(lastTickTime));
+                        GVAR(lastTime) = time; // used to detect paused game
+                    };
+
+                    GVAR(lastTickTime) = _tickTime
+                };
+            };
+        };
     };
 } else {
+    // single player
     FUNC(missionTimePFH) = {
         private _tickTime = diag_tickTime;
 
@@ -184,28 +216,5 @@ if (isMultiplayer) then {
         };
 
         GVAR(lastTickTime) = _tickTime
-    };
-};
-
-// also synch it
-if (isServer) then {
-    CBA_missionTime = 0;
-
-    // server
-    [FUNC(missionTimePFH), 0, []] call CBA_fnc_addPerFrameHandler;
-
-    ["CBA_SynchMissionTime", "onPlayerConnected", {
-        _owner publicVariableClient "CBA_missionTime";
-    }] call BIS_fnc_addStackedEventHandler;
-} else {
-    CBA_missionTime = -1;
-
-    // client
-    0 spawn {
-        "CBA_missionTime" addPublicVariableEventHandler {
-            CBA_missionTime = _this select 1;
-            GVAR(lastTickTime) = diag_tickTime; // prevent time skip on clients
-            [FUNC(missionTimePFH), 0, []] call CBA_fnc_addPerFrameHandler;
-        };
     };
 };
