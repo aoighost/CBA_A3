@@ -148,6 +148,13 @@ addMissionEventHandler ["Loaded", {
         _x set [2, (_x select 2) - GVAR(lastTickTime) + diag_tickTime];
     } forEach GVAR(perFrameHandlerArray);
 
+    if (isMultiplayer && isServer) then {
+        // fixes onPlayerConnected not being serialized in MP resumed game
+        ["CBA_SynchMissionTime", "onPlayerConnected", {
+            _owner publicVariableClient "CBA_missionTime";
+        }] call BIS_fnc_addStackedEventHandler;
+    };
+
     GVAR(lastFrameRender) = diag_frameNo; // reset these for new session
     GVAR(lastTickTime) = diag_tickTime;
 }];
@@ -190,10 +197,6 @@ if (isServer) then {
     ["CBA_SynchMissionTime", "onPlayerConnected", {
         _owner publicVariableClient "CBA_missionTime";
     }] call BIS_fnc_addStackedEventHandler;
-
-    0 spawn {
-        publicVariable "CBA_missionTime";
-    };
 } else {
     CBA_missionTime = -1;
 
